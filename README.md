@@ -1,2 +1,2 @@
-# embryo_stage_classifier
-Model for classifying drosophila embryo stages 
+# Embryo stage classification
+Model for classifying Drosophila embryo stages 
