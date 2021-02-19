@@ -1,0 +1,12 @@
+name: embryo_class
+channels:
+  - anaconda
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python==3.7
+  - pytorch
+  - torchvision
+  - cpuonly
+
