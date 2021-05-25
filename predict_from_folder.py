@@ -3,12 +3,13 @@ import glob
 import os
 import numpy as np
 import torch
+from torch.nn import functional as F
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, models
 from PIL import Image
 
 
-LABEL_MAP = {0: 5, 1: 7, 2: 10, 3: 12, 4: 13, 5: 14, 6: 15, 7: 16}
+LABEL_MAP = {-1: -1, 0: 5, 1: 7, 2: 10, 3: 12, 4: 13, 5: 14, 6: 15, 7: 16}
 
 
 class EmbryoPredictDataset(Dataset):
@@ -27,14 +28,22 @@ class EmbryoPredictDataset(Dataset):
         return image
 
 
-def predict(model, loader):
+def predict(model, loader, prob_thres=None):
     all_predictions = []
     model.eval()
     with torch.no_grad():
         for imgs in loader:
             imgs = imgs.to(device)
-            preds = model(imgs).cpu().numpy().argmax(1)
+            if not prob_thres:
+                preds = model(imgs).cpu().numpy().argmax(1)
+            else:
+                preds = F.softmax(model(imgs), dim=1).cpu().numpy()
             all_predictions.extend(preds)
+    if prob_thres:
+        all_predictions = np.array(all_predictions)
+        above_thres = np.any(all_predictions > prob_thres, axis=1)
+        all_predictions = all_predictions.argmax(1)
+        all_predictions[~above_thres] = -1
     remapped_predictions = np.array([LABEL_MAP[i] for i in all_predictions])
     return remapped_predictions
 
@@ -59,6 +68,8 @@ if __name__ == "__main__":
                         help='number of dataloader workers')
     parser.add_argument('--model', type=str, default='stage_classifier.pth',
                         help='model to use')
+    parser.add_argument('--p_threshold', type=float, default=0,
+                        help='discard predictions with probability lower than this threshold')
     args = parser.parse_args()
 
     if args.device == 'cpu':
@@ -77,10 +88,10 @@ if __name__ == "__main__":
 
     print("Loading the data")
     dataset = EmbryoPredictDataset(args.images_folder)
-    predict_loader = DataLoader(dataset, batch_size=10, num_workers=16)
+    predict_loader = DataLoader(dataset, batch_size=args.batch_size, num_workers=args.num_workers)
 
     print("Predicting")
-    predictions = predict(model, predict_loader)
+    predictions = predict(model, predict_loader, prob_thres=args.p_threshold)
 
     print("Sorting files")
     move_to_folders(predictions, dataset)
